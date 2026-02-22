@@ -1,0 +1,76 @@
+import { clamp } from './format.js'
+import { rsi, ema, bollinger, volSpike } from './indicators.js'
+
+export function computeScore({ closes, volumes, last, funding, obImbalance, newsScore }){
+  const r = rsi(closes, 14)
+  const e20 = ema(closes, 20)
+  const e50 = ema(closes, 50)
+  const bb = bollinger(closes, 20, 2)
+  const vs = volSpike(volumes, 20)
+
+  let score = 0
+  let reasons = []
+
+  if (r !== null){
+    const rPart = 30 - Math.abs(r - 50) * 0.8
+    score += clamp(rPart, 0, 30)
+    reasons.push(`RSI ${r.toFixed(1)}`)
+  } else reasons.push('RSI n/d')
+
+  if (e20 !== null && e50 !== null){
+    const trend = e20 > e50 ? 18 : 8
+    score += trend
+    reasons.push(e20 > e50 ? 'Trend ↑ (EMA20>EMA50)' : 'Trend ↓ (EMA20<EMA50)')
+  } else reasons.push('EMA n/d')
+
+  if (bb && last){
+    const pos = (last - bb.lower) / (bb.upper - bb.lower)
+    const bbPart = 18 - Math.abs(pos - 0.35) * 30
+    score += clamp(bbPart, 0, 18)
+    reasons.push(`BB pos ${(pos*100).toFixed(0)}%`)
+  } else reasons.push('BB n/d')
+
+  if (vs && vs.ratio !== null){
+    const vPart = clamp((vs.ratio - 1) * 12, 0, 20)
+    score += vPart
+    reasons.push(`Vol x${vs.ratio.toFixed(2)}`)
+  } else reasons.push('Vol n/d')
+
+  if (funding !== null && funding !== undefined){
+    const f = funding
+    let fPart = 0
+    if (f < -0.01) fPart = 8
+    else if (f <= 0.03) fPart = 10
+    else if (f <= 0.08) fPart = 6
+    else fPart = 2
+    score += fPart
+    reasons.push(`Funding ${f.toFixed(3)}%`)
+  } else reasons.push('Funding n/d')
+
+  if (obImbalance !== null && obImbalance !== undefined){
+    score += clamp(obImbalance * 10, 0, 10)
+    reasons.push(`OB ${(obImbalance*100).toFixed(0)}% bid`)
+  } else reasons.push('OB n/d')
+
+  if (newsScore !== null && newsScore !== undefined){
+    score += clamp((newsScore/100)*4, 0, 4)
+    reasons.push(`News ${newsScore}/100`)
+  } else reasons.push('News n/d')
+
+  score = Math.round(clamp(score, 0, 100))
+  return { score, reasons, rsi: r, ema20: e20, ema50: e50, bb, vol: vs }
+}
+
+export function verdictFromScore(score){
+  if (score >= 80) return { tag: 'ORA COMPRI', color: 'ok' }
+  if (score >= 65) return { tag: 'PREPARATI', color: 'gold' }
+  if (score >= 50) return { tag: 'ATTENDI', color: 'muted' }
+  return { tag: 'EVITA', color: 'danger' }
+}
+
+export function planFromPriceEUR(entryEUR){
+  const tp1 = entryEUR * 1.10
+  const tp2 = entryEUR * 1.25
+  const sl = entryEUR * 0.94
+  return { entryEUR, tp1, tp2, sl }
+}

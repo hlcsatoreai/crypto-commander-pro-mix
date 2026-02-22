@@ -1,0 +1,52 @@
+const REST = 'https://api.binance.com'
+
+export async function fetchTopUSDTByVolume(limit=30){
+  const res = await fetch(`${REST}/api/v3/ticker/24hr`)
+  const data = await res.json()
+  const usdt = data.filter(x => x.symbol.endsWith('USDT') && !x.symbol.includes('UPUSDT') && !x.symbol.includes('DOWNUSDT'))
+  usdt.sort((a,b)=>Number(b.quoteVolume)-Number(a.quoteVolume))
+  return usdt.slice(0, limit).map(x => ({
+    symbol: x.symbol,
+    last: Number(x.lastPrice),
+    change24: Number(x.priceChangePercent),
+    quoteVolume: Number(x.quoteVolume),
+  }))
+}
+
+export async function fetchKlines(symbol, interval='5m', limit=120){
+  const res = await fetch(`${REST}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`)
+  const k = await res.json()
+  const closes = k.map(row => Number(row[4]))
+  const volumes = k.map(row => Number(row[5]))
+  return { closes, volumes, raw: k }
+}
+
+export async function fetchOrderBook(symbol, limit=20){
+  const res = await fetch(`${REST}/api/v3/depth?symbol=${encodeURIComponent(symbol)}&limit=${limit}`)
+  const ob = await res.json()
+  const bids = ob.bids.map(([p,q]) => ({ p: Number(p), q: Number(q) }))
+  const asks = ob.asks.map(([p,q]) => ({ p: Number(p), q: Number(q) }))
+  return { bids, asks }
+}
+
+export function computeImbalance(ob){
+  if (!ob) return null
+  const bidNotional = ob.bids.reduce((a,b)=>a + b.p*b.q, 0)
+  const askNotional = ob.asks.reduce((a,b)=>a + b.p*b.q, 0)
+  const total = bidNotional + askNotional
+  if (!total) return null
+  return bidNotional/total
+}
+
+export function wsTickerStream(symbols, onMsg){
+  const streams = symbols.map(s => `${s.toLowerCase()}@ticker`).join('/')
+  const url = `wss://stream.binance.com:9443/stream?streams=${streams}`
+  const ws = new WebSocket(url)
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data)
+      if (msg?.data?.s) onMsg(msg.data)
+    } catch {}
+  }
+  return ws
+}

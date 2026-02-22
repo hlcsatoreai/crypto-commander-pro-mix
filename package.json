@@ -1,0 +1,15 @@
+export async function getEURPerUSDT(){
+  const res = await fetch('/.netlify/functions/eur')
+  const j = await res.json()
+  return j?.eurPerUsdt ?? null
+}
+export async function getFunding(symbol){
+  const res = await fetch(`/.netlify/functions/funding?symbol=${encodeURIComponent(symbol)}`)
+  const j = await res.json()
+  return j?.fundingRatePct ?? null
+}
+export async function getNewsScore(symbol){
+  const res = await fetch(`/.netlify/functions/news?symbol=${encodeURIComponent(symbol)}`)
+  const j = await res.json()
+  return j?.score ?? null
+}

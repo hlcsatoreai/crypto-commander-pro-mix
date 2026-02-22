@@ -1,0 +1,38 @@
+import { json, safeSymbol } from './_util.js'
+
+const FEEDS = [
+  'https://www.coindesk.com/arc/outboundfeeds/rss/',
+  'https://cointelegraph.com/rss',
+]
+
+const POS = ['partnership','listed','listing','launch','upgrade','mainnet','integrat','etf','approval','institution','bank','binance','coinbase']
+const NEG = ['hack','exploit','lawsuit','ban','delist','scam','rug','halt','outage']
+
+async function fetchText(url){
+  const r = await fetch(url, { headers: { 'user-agent': 'crypto-commander-pro-mix/1.0' } })
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return await r.text()
+}
+function scoreText(text, symbol){
+  const t = text.toLowerCase()
+  const sym = symbol.replace('USDT','').toLowerCase()
+  let s = 50
+  if (t.includes(sym)) s += 15
+  for (const k of POS) if (t.includes(k)) s += 4
+  for (const k of NEG) if (t.includes(k)) s -= 6
+  if (s < 0) s = 0
+  if (s > 100) s = 100
+  return s
+}
+export const handler = async (event) => {
+  try{
+    const symbol = safeSymbol(event.queryStringParameters?.symbol || 'BTCUSDT')
+    if (!symbol) return json({ error: 'Bad symbol' }, 400)
+    const texts = await Promise.allSettled(FEEDS.map(fetchText))
+    const joined = texts.filter(x=>x.status==='fulfilled').map(x=>x.value).join('\n')
+    const score = joined ? scoreText(joined, symbol) : 50
+    return json({ symbol, score })
+  }catch(e){
+    return json({ score: 50, error: String(e?.message || e) }, 200)
+  }
+}

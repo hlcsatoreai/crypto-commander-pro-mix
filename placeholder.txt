@@ -1,0 +1,14 @@
+import { json, fetchJson, safeSymbol } from './_util.js'
+export const handler = async (event) => {
+  try{
+    const symbol = safeSymbol(event.queryStringParameters?.symbol || 'BTCUSDT')
+    if (!symbol) return json({ error: 'Bad symbol' }, 400)
+    const url = `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${encodeURIComponent(symbol)}&limit=1`
+    const arr = await fetchJson(url)
+    const fr = Array.isArray(arr) && arr.length ? Number(arr[0].fundingRate) : null
+    const fundingRatePct = fr === null ? null : fr * 100
+    return json({ symbol, fundingRatePct })
+  }catch(e){
+    return json({ fundingRatePct: null, error: String(e?.message || e) }, 200)
+  }
+}
